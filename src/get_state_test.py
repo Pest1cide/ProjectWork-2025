@@ -27,18 +27,18 @@ def main():
 
     # Make a robot state request
     if options.command == 'state':
-        while True:
-            joints = {}
-            # for i in range(0,20):
-                    #  print(robot_state_client.get_robot_state().kinematic_state.joint_states[i].name)
-            joint_angles = list(map(lambda x: {"name": x.name, "position": x.position.value}, list(robot_state_client.get_robot_state().kinematic_state.joint_states)))
-            for joint_angle in joint_angles:
-                joints[joint_angle["name"]] = joint_angle["position"]
-            # print(list(map(lambda x: {"name": x.name, "position": x.position}, list(robot_state_client.get_robot_state().kinematic_state.joint_states))))
-            print(*joint_angles, sep='\n')
-            # print(joints["fl.hx"])
-            time.sleep(1)
-            os.system('clear')
+        # while True:
+        joints = {}
+        # for i in range(0,20):
+                #  print(robot_state_client.get_robot_state().kinematic_state.joint_states[i].name)
+        joint_angles = list(map(lambda x: {"name": x.name, "position": x.position.value}, list(robot_state_client.get_robot_state().kinematic_state.joint_states)))
+        for joint_angle in joint_angles:
+            joints[joint_angle["name"]] = joint_angle["position"]
+        # print(list(map(lambda x: {"name": x.name, "position": x.position}, list(robot_state_client.get_robot_state().kinematic_state.joint_states))))
+        # print(*joint_angles, sep='\n')
+        print(joints)
+        time.sleep(0.4)
+        # os.system('clear')
     elif options.command == 'hardware':
         print(robot_state_client.get_hardware_config_with_link_info())
     elif options.command == 'metrics':
