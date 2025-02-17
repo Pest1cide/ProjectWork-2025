@@ -423,136 +423,139 @@ def start_plotting_and_recording_client(host='127.0.0.1', port=12345, output_fil
 #########################
 # 3D Visualization Client (PyBullet)
 #########################
-def start_3d_visualization_client(host='127.0.0.1', port=12346, urdf_path='spot.urdf'):
+def start_3d_visualization_client(host="localhost",port=12346, urdf_path='spot.urdf'):
+   return start_3d_visualization_clients([(host, port), (host, port+1)], [urdf_path, urdf_path])
+
+def start_3d_visualization_clients(servers, urdf_paths):
     """
-    A client that connects to the server, receives joint data, and displays a 3D visualization
-    of the robot using PyBullet. The URDF file must be specified (or default to 'spot.urdf'),
-    and the joint names from the server should match the URDF's joint naming.
+    A client that connects to multiple servers, receives joint data, and displays multiple 3D robot visualizations
+    using PyBullet. Each URDF file must be specified for each server connection.
     """
     if p is None:
         print("PyBullet is not installed. Please install pybullet to use 3D visualization.")
         return
 
-    # Try to connect to the server
     stop_event = threading.Event()
-    client_socket = None
-    buffer = b''
+    client_sockets = {}
+    buffers = {}
+    robot_ids = {}
+    joint_maps = {}
 
     # PyBullet setup
     physics_client = p.connect(p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
-    p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=30, cameraPitch=-30, cameraTargetPosition=[0,0,12])
-    p.setGravity(0,0,0)  # No gravity
+    p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=30, cameraPitch=-30, cameraTargetPosition=[0, 0, 12])
+    p.setGravity(0, 0, 0)
     p.setRealTimeSimulation(0)
 
-    # Load the robot URDF
-    try:
-        robot_id = p.loadURDF(urdf_path, useFixedBase=False)  # Allow dragging by default
-    except Exception as e:
-        print(f"Failed to load URDF {urdf_path}: {e}")
+    # Load robots and establish connections
+    for server, urdf_path in zip(servers, urdf_paths):
+        host, port = server
+        try:
+            robot_id = p.loadURDF(urdf_path, useFixedBase=False)
+            robot_ids[str(server)] = robot_id
+        except Exception as e:
+            print(f"Failed to load URDF {urdf_path} for server {server}: {e}")
+            continue
+
+        joint_name_to_index = {}
+        num_joints = p.getNumJoints(robot_id)
+        for i in range(num_joints):
+            joint_info = p.getJointInfo(robot_id, i)
+            name = joint_info[1].decode('utf-8')
+            joint_name_to_index[name] = i
+        joint_maps[str(server)] = joint_name_to_index
+
+        def try_connect_viz(server):
+            while not stop_event.is_set():
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2.0)
+                try:
+                    s.connect(server)
+                    s.settimeout(1.0)
+                    print(f"[3D Viz] Connected to server at {server}")
+                    return s
+                except (ConnectionRefusedError, TimeoutError, OSError) as e:
+                    s.close()
+                    print(f"[3D Viz] Connection error: {e}, retrying in 2 seconds...")
+                    time.sleep(2)
+            return None
+
+        client_sockets[str(server)] = try_connect_viz(server)
+        buffers[str(server)] = b''
+
+    if not client_sockets:
+        print("[3D Viz] No connections established, exiting.")
         return
 
-    # Enable dragging
-    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
-
-    # Build a map from joint name to joint index in PyBullet
-    joint_name_to_index = {}
-    num_joints = p.getNumJoints(robot_id)
-    for i in range(num_joints):
-        joint_info = p.getJointInfo(robot_id, i)
-        name = joint_info[1].decode('utf-8')
-        joint_name_to_index[name] = i
-
-    def try_connect_viz():
-        while not stop_event.is_set():
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2.0)
-            try:
-                s.connect((host, port))
-                s.settimeout(1.0)
-                print(f"[3D Viz] Connected to server at {host}:{port}")
-                return s
-            except (ConnectionRefusedError, TimeoutError, OSError) as e:
-                s.close()
-                print(f"[3D Viz] Connection error: {e}, retrying in 2 seconds...")
-                time.sleep(2)
-        return None
-
-    # Attempt initial connection
-    client_socket = try_connect_viz()
-    if client_socket is None:
-        print("[3D Viz] Could not connect, exiting.")
-        return
-
     try:
         while not stop_event.is_set():
-            # Attempt to receive data
-            try:
-                chunk = client_socket.recv(1024)
-                if not chunk:
-                    # Server closed connection?
-                    print("[3D Viz] Server closed connection, will attempt to reconnect.")
-                    client_socket.close()
-                    client_socket = None
-                    client_socket = try_connect_viz()
-                    if client_socket is None:
-                        break
+            for server in list(client_sockets.keys()):
+                client_socket = client_sockets[str(server)]
+                if client_socket is None:
                     continue
 
-                buffer += chunk
-                while b'\n' in buffer:
-                    line, buffer = buffer.split(b'\n', 1)
-                    line = line.strip()
-                    if line:
-                        try:
-                            line_str = line.decode('utf-8')
-                            data = json.loads(line_str)
+                try:
+                    chunk = client_socket.recv(1024)
+                    if not chunk:
+                        print(f"[3D Viz] Server {server} closed connection, will attempt to reconnect.")
+                        client_socket.close()
+                        client_sockets[str(server)] = try_connect_viz(server)
+                        if client_sockets[str(server)] is None:
+                            del client_sockets[str(server)]
+                            del robot_ids[str(server)]
+                            del joint_maps[str(server)]
+                        continue
 
-                            # If we have base_x,y,z plus base_qx,qy,qz,qw in the data, use that.
-                            base_x = data.get('base_x', 0.0)
-                            base_y = data.get('base_y', 0.0)
-                            base_z = data.get('base_z', 0.0)
+                    buffers[str(server)] += chunk
+                    while b'\n' in buffers[str(server)]:
+                        line, buffers[str(server)] = buffers[str(server)].split(b'\n', 1)
+                        line = line.strip()
+                        if line:
+                            try:
+                                data = json.loads(line.decode('utf-8'))
+                                robot_id = robot_ids[str(server)]
 
-                            qx = data.get('base_qx', 0.0)
-                            qy = data.get('base_qy', 0.0)
-                            qz = data.get('base_qz', 0.0)
-                            qw = data.get('base_qw', 1.0)
+                                base_x = data.get('base_x', 0.0)
+                                base_y = data.get('base_y', 0.0)
+                                base_z = data.get('base_z', 0.0)
+                                qx = data.get('base_qx', 0.0)
+                                qy = data.get('base_qy', 0.0)
+                                qz = data.get('base_qz', 0.0)
+                                qw = data.get('base_qw', 1.0)
 
-                            p.resetBasePositionAndOrientation(robot_id, [base_x, base_y, base_z], [qx, qy, qz, qw])
+                                p.resetBasePositionAndOrientation(robot_id, [base_x, base_y, base_z], [qx, qy, qz, qw])
 
-                            # Update the robot's joint angles
-                            for joint_name, angle in data.items():
-                                if joint_name in joint_name_to_index:
-                                    j_idx = joint_name_to_index[joint_name]
-                                    p.resetJointState(robot_id, j_idx, angle)
+                                for joint_name, angle in data.items():
+                                    if joint_name in joint_maps[str(server)]:
+                                        j_idx = joint_maps[str(server)][joint_name]
+                                        p.resetJointState(robot_id, j_idx, angle)
 
-                            # Step simulation
-                            p.stepSimulation()
-
-                        except json.JSONDecodeError:
-                            continue
-            except socket.timeout:
-                # no data, step simulation anyway
-                p.stepSimulation()
-                time.sleep(0.01)
-            except (ConnectionResetError, OSError) as e:
-                print(f"[3D Viz] Connection lost ({e}), will attempt to reconnect.")
-                if client_socket:
+                                p.stepSimulation()
+                            except json.JSONDecodeError:
+                                continue
+                except socket.timeout:
+                    p.stepSimulation()
+                    time.sleep(0.01)
+                except (ConnectionResetError, OSError) as e:
+                    print(f"[3D Viz] Connection lost with {server} ({e}), will attempt to reconnect.")
                     client_socket.close()
-                client_socket = None
-                client_socket = try_connect_viz()
-                if client_socket is None:
-                    break
-                continue
-
+                    client_sockets[str(server)] = try_connect_viz(server)
+                    if client_sockets[str(server)] is None:
+                        del client_sockets[str(server)]
+                        del robot_ids[str(server)]
+                        del joint_maps[str(server)]
+                    continue
+                
             time.sleep(0.01)
 
     except KeyboardInterrupt:
         print("[3D Viz] Keyboard interrupt, shutting down.")
     finally:
         stop_event.set()
-        if client_socket:
-            client_socket.close()
+        for client_socket in client_sockets.values():
+            if client_socket:
+                client_socket.close()
         p.disconnect()
         print("[3D Viz] Exiting 3D visualization.")
 
@@ -702,6 +705,9 @@ if __name__ == "__main__":
 
         if mode == 'server' and len(sys.argv) >= 3:
             path = sys.argv[2]
+            print(sys.argv)
+            port =  int(sys.argv[3]) if len(sys.argv) > 3 else 12346
+            print(port)
             # Decide if path is folder or file
             if os.path.isdir(path):
                 # Start interpolation thread
@@ -719,7 +725,7 @@ if __name__ == "__main__":
                 )
             updater_thread.start()
             # Start server
-            start_server(global_state)
+            start_server(global_state, port=port)
 
         elif mode == 'spot' and len(sys.argv) >= 3:
             # Example usage to connect to real Spot.
