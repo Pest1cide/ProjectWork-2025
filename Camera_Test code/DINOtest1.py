@@ -1,5 +1,4 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
 import torch
 import numpy as np
 import cv2
@@ -7,15 +6,14 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from transformers import AutoModel, AutoImageProcessor
 
+
 # Fix memory leak warning in Windows
 os.environ["OMP_NUM_THREADS"] = "1"
 
-# Load DINOv2 model and processor
+# Load DINOv2 model and processor (without the `use_fast` argument)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model_name = "facebook/dinov2-base"
-#processor = AutoImageProcessor.from_pretrained(model_name, use_fast=True)  # Explicitly set use_fast=True
-processor = AutoImageProcessor.from_pretrained(model_name)
-
+processor = AutoImageProcessor.from_pretrained(model_name)  # No `use_fast` here
 model = AutoModel.from_pretrained(model_name).to(device)
 model.eval()
 
@@ -34,13 +32,13 @@ def segment_image(image, k=3):
 
     # Extract features
     features = extract_features(img_resized)  # Shape: (256, feature_dim)
-    
+
     # K-Means clustering
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     labels = kmeans.fit_predict(features)  # Shape: (256,)
 
-    # DINOv2 extracts a 16x16 feature grid for a 224x224 image
-    segmented = labels.reshape(16, 16)  # Ensure correct reshaping
+    # Reshape to (H, W)
+    segmented = labels.reshape(16, 16)  # Corrected shape
 
     return segmented
 
@@ -48,30 +46,19 @@ def detect_ball(image, segmented_mask):
     """Finds the largest segmented region (ball) and draws a bounding box"""
     mask_resized = cv2.resize(segmented_mask.astype(np.uint8), (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
     
-    # Convert mask to binary
-    mask_binary = (mask_resized == mask_resized.max()).astype(np.uint8) * 255  # Highlight only the largest cluster
-
     # Find contours
-    contours, _ = cv2.findContours(mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask_resized, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Select the largest contour (assuming it's the ball)
+    # Select largest contour (assuming it's the ball)
     if contours:
         largest_contour = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(largest_contour)
-        
-        # Draw bounding box on a copy of the image
-        output_image = image.copy()
-        cv2.rectangle(output_image, (x, y), (x+w, y+h), (0, 255, 0), 3)  # Green box
-        return output_image
-    return image  # Return original image if no ball is found
+        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 3)  # Draw bounding box
+    return image
 
 # Load and process input image
 image_path = "ball.jpg"  # Change to your image file
 image = cv2.imread(image_path)
-
-# Ensure the image is loaded correctly
-if image is None:
-    raise FileNotFoundError(f"Could not load image at path: {image_path}")
 
 # Segment the ball using DINOv2 features
 segmented_mask = segment_image(image)
