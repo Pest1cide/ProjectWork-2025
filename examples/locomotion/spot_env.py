@@ -9,7 +9,7 @@ def gs_rand_float(lower, upper, shape, device):
 
 
 class SpotEnv:
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda"):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda", is_eval=False):
         self.device = torch.device(device)
 
         self.num_envs = num_envs
@@ -117,6 +117,46 @@ class SpotEnv:
         self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["lin_vel_y_range"], (len(envs_idx),), self.device)
         self.commands[envs_idx, 2] = gs_rand_float(*self.command_cfg["ang_vel_range"], (len(envs_idx),), self.device)
 
+
+
+
+    def update_command_with_keyboard(self, key, env_idx=0, delta=0.1):
+        """
+        Update the command based on keyboard input.
+        :param key: The key pressed ('w', 's', 'a', 'd').
+        :param env_idx: The index of the environment to update.
+        :param delta: The amount to change the command by.
+        :return: None
+        """
+        # key w : increse x velocity
+        if key.lower() == 'w':
+            self.commands[env_idx, 0] = torch.clamp(
+                self.commands[env_idx, 0] + delta,
+                min=self.command_cfg["lin_vel_x_range"][0],
+                max=self.command_cfg["lin_vel_x_range"][1]
+            )
+        # key s : decrease x velocity
+        elif key.lower() == 's':
+            self.commands[env_idx, 0] = torch.clamp(
+                self.commands[env_idx, 0] - delta,
+                min=self.command_cfg["lin_vel_x_range"][0],
+                max=self.command_cfg["lin_vel_x_range"][1]
+            )
+        # key a : decrease y velocity
+        elif key.lower() == 'a':
+            self.commands[env_idx, 1] = torch.clamp(
+                self.commands[env_idx, 1] - delta,
+                min=self.command_cfg["lin_vel_y_range"][0],
+                max=self.command_cfg["lin_vel_y_range"][1]
+            )
+        # key d : increase y velocity
+        elif key.lower() == 'd':
+            self.commands[env_idx, 1] = torch.clamp(
+                self.commands[env_idx, 1] + delta,
+                min=self.command_cfg["lin_vel_y_range"][0],
+                max=self.command_cfg["lin_vel_y_range"][1]
+            )
+
     def step(self, actions):
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
         exec_actions = self.last_actions if self.simulate_action_latency else self.actions
@@ -144,7 +184,11 @@ class SpotEnv:
             .nonzero(as_tuple=False)
             .flatten()
         )
-        self._resample_commands(envs_idx)
+        if not self.is_eval:
+            self._resample_commands(envs_idx)
+        else:
+            key = input("input command (w: forward, s: backward, a: left, d: right): ")
+            self.update_command_with_keyboard(key, env_idx=0)
 
         # check termination and reset
         self.reset_buf = self.episode_length_buf > self.max_episode_length
