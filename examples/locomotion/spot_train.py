@@ -73,14 +73,14 @@ def get_cfgs():
             "fr_kn": -1.5,
             "hl_kn": -1.5,
             "hr_kn": -1.5,
-            # "arm0_sh0": 0.05785536766052246,
-            # "arm0_sh1": -3.118537187576294, 
-            # "arm0_hr0": 0.0, 
-            # "arm0_el0": 3.136108875274658, 
-            # "arm0_el1": 1.5643538236618042, 
-            # "arm0_wr0": 0.33551907539367676, 
-            # "arm0_wr1": -1.7799558639526367, 
-            # "arm0_f1x": -0.278841495513916
+            "arm0_sh0": 0.05785536766052246,
+            "arm0_sh1": -3.118537187576294, 
+            "arm0_hr0": 0.0, 
+            "arm0_el0": 3.136108875274658, 
+            "arm0_el1": 1.5643538236618042, 
+            "arm0_wr0": 0.33551907539367676, 
+            "arm0_wr1": -1.7799558639526367, 
+            "arm0_f1x": -0.278841495513916
 
         },
         "dof_names": [
@@ -96,6 +96,15 @@ def get_cfgs():
             "hl_hx",
             "hl_hy",
             "hl_kn",
+            "arm0_sh0",
+            "arm0_sh1", 
+            "arm0_hr0", 
+            "arm0_el0", 
+            "arm0_el1", 
+            "arm0_wr0", 
+            "arm0_wr1", 
+            "arm0_f1x"
+
 
         ],
         # PD
@@ -163,7 +172,7 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     env = SpotEnv(
-        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=False
+        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device="cuda:0")
