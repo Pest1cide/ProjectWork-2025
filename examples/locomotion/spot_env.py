@@ -2,7 +2,8 @@ import torch
 import math
 import genesis as gs
 from genesis.utils.geom import quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
-
+import threading
+from pynput import keyboard
 
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
@@ -10,6 +11,7 @@ def gs_rand_float(lower, upper, shape, device):
 
 class SpotEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda", is_eval=False):
+        self.current_key = None
         self.device = torch.device(device)
 
         self.num_envs = num_envs
@@ -26,6 +28,7 @@ class SpotEnv:
         self.obs_cfg = obs_cfg
         self.reward_cfg = reward_cfg
         self.command_cfg = command_cfg
+        self.is_eval = is_eval
 
         self.obs_scales = obs_cfg["obs_scales"]
         self.reward_scales = reward_cfg["reward_scales"]
@@ -111,13 +114,30 @@ class SpotEnv:
             dtype=gs.tc_float,
         )
         self.extras = dict()  # extra information for logging
+        self.start_keyboard_listener()
 
     def _resample_commands(self, envs_idx):
         self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["lin_vel_x_range"], (len(envs_idx),), self.device)
         self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["lin_vel_y_range"], (len(envs_idx),), self.device)
         self.commands[envs_idx, 2] = gs_rand_float(*self.command_cfg["ang_vel_range"], (len(envs_idx),), self.device)
 
+    def on_press(self,key):
+        try:
+            if key.char in ['w', 'a', 's', 'd']:
+                self.current_key = key.char
+        except AttributeError:
+            pass  # ignore special key（shift, ctrl etc）
 
+    def get_and_clear_key(self):
+        key = self.current_key
+        self.current_key = None
+        return key
+
+    # call once
+    def start_keyboard_listener(self):
+        self.listener = keyboard.Listener(on_press=self.on_press)
+        self.listener.daemon = True
+        self.listener.start()
 
 
     def update_command_with_keyboard(self, key, env_idx=0, delta=0.1):
@@ -187,8 +207,9 @@ class SpotEnv:
         if not self.is_eval:
             self._resample_commands(envs_idx)
         else:
-            key = input("input command (w: forward, s: backward, a: left, d: right): ")
-            self.update_command_with_keyboard(key, env_idx=0)
+            key = self.get_and_clear_key()
+            if key:
+                self.update_command_with_keyboard(key, env_idx=0)
 
         # check termination and reset
         self.reset_buf = self.episode_length_buf > self.max_episode_length

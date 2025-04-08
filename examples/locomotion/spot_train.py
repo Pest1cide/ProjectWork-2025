@@ -163,7 +163,7 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     env = SpotEnv(
-        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True
+        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=False
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device="cuda:0")
