@@ -140,7 +140,7 @@ class SpotEnv:
         self.listener.start()
 
 
-    def update_command_with_keyboard(self, key, env_idx=0, delta=0.1):
+    def update_command_with_keyboard(self, key, env_idx=0, delta=0.5):
         """
         Update the command based on keyboard input.
         :param key: The key pressed ('w', 's', 'a', 'd').

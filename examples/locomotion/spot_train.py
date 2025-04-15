@@ -58,7 +58,7 @@ def get_train_cfg(exp_name, max_iterations):
 
 def get_cfgs():
     env_cfg = {
-        "num_actions": 12,
+        "num_actions": 19,
         # joint/link names
         "default_joint_angles": {  # [rad]
             "fl_hx": 0.0,
@@ -73,7 +73,7 @@ def get_cfgs():
             "fr_kn": -1.5,
             "hl_kn": -1.5,
             "hr_kn": -1.5,
-            "arm0_sh0": 0.05785536766052246,
+            # "arm0_sh0": 0.05785536766052246,
             "arm0_sh1": -3.118537187576294, 
             "arm0_hr0": 0.0, 
             "arm0_el0": 3.136108875274658, 
@@ -96,8 +96,8 @@ def get_cfgs():
             "hl_hx",
             "hl_hy",
             "hl_kn",
-            "arm0_sh0",
-            "arm0_sh1", 
+            # "arm0_sh0",
+            "arm0_sh1",
             "arm0_hr0", 
             "arm0_el0", 
             "arm0_el1", 
@@ -123,7 +123,7 @@ def get_cfgs():
         "clip_actions": 100.0,
     }
     obs_cfg = {
-        "num_obs": 45,
+        "num_obs": 45 + 21,
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,
@@ -133,21 +133,21 @@ def get_cfgs():
     }
     reward_cfg = {
         "tracking_sigma": 0.25,
-        "base_height_target": 0.45,
-        "feet_height_target": 0.1,
+        "base_height_target": 0.55,
+        "feet_height_target": 0.15,
         "reward_scales": {
             "tracking_lin_vel": 1.0,
             "tracking_ang_vel": 0.2,
             "lin_vel_z": -1.0,
             "base_height": -50.0,
             "action_rate": -0.005,
-            "similar_to_default": -0.1,
+            "similar_to_default": -0.01,
         },
     }
     command_cfg = {
         "num_commands": 3,
         "lin_vel_x_range": [-0.5, 0.5],
-        "lin_vel_y_range": [-0.5, 0.5],
+        "lin_vel_y_range": [-0.0, 0.0],
         "ang_vel_range": [0, 0],
     }
 

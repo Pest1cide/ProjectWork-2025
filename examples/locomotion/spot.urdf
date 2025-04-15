@@ -262,7 +262,7 @@
     <child link="rear_right_lower_leg"/>
     <limit effort="1000" lower="-2.7929" upper="-0.257725" velocity="1000.00"/>
   </joint>
-<!--   <link name="arm0_link_sh0">
+  <link name="arm0_link_sh0">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -272,8 +272,8 @@
         <color rgba="0.2 0.2 0.2 1"/>
       </material>
     </visual>
-  </link> -->
-  <!-- <joint name="arm0_sh0" type="fixed">
+  </link>
+  <joint name="arm0_sh0" type="fixed">
     <origin rpy="0 0 0" xyz="0.292 0.0 0.188"/>
     <axis xyz="0 0 1"/>
     <parent link="base_link"/>
@@ -411,7 +411,7 @@
     <origin rpy="0 0 0" xyz="0.13 0.0 -0.06"/>
     <parent link="arm0_link_fngr"/>
     <child link="arm0_link_ee"/>
-  </joint> -->
+  </joint>
   <!-- This file is a placeholder which is included by default from
        spot.urdf.xacro. If a robot is being customized and requires
        additional URDF, set the SPOT_URDF_EXTRAS environment variable
