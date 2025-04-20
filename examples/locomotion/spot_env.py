@@ -4,6 +4,7 @@ import genesis as gs
 from genesis.utils.geom import quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
 import threading
 from pynput import keyboard
+from utils import *
 
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
@@ -13,7 +14,45 @@ class SpotEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, device="cuda", is_eval=False):
         self.current_key = None
         self.device = torch.device(device)
+        self.training_iteration = 0
+        # def find_link_indices(names):
+        #     link_indices = list()
+        #     for link in self.robot.links:
+        #         flag = False
+        #         for name in names:
+        #             if name in link.name:
+        #                 flag = True
+        #         if flag:
+        #             link_indices.append(link.idx - self.robot.link_start)
+        #     return link_indices
+        # self.feet_link_indices = find_link_indices(
+        #     self.env_cfg['feet_link_names']
+        # )
+        # self.feet_air_time = torch.zeros(
+        #     (self.num_envs, len(self.feet_link_indices)),
+        #     device=self.device,
+        #     dtype=gs.tc_float,
+        # )
+        # self.feet_max_height = torch.zeros(
+        #     (self.num_envs, len(self.feet_link_indices)),
+        #     device=self.device,
+        #     dtype=gs.tc_float,
+        # )
 
+        # self.last_contacts = torch.zeros(
+        #     (self.num_envs, len(self.feet_link_indices)),
+        #     device=self.device,
+        #     dtype=gs.tc_int,
+        # )
+        # self.foot_positions = torch.ones(
+        #     self.num_envs, len(self.feet_link_indices), 3, device=self.device, dtype=gs.tc_float,
+        # )
+        # self.foot_quaternions = torch.ones(
+        #     self.num_envs, len(self.feet_link_indices), 4, device=self.device, dtype=gs.tc_float,
+        # )
+        # self.foot_velocities = torch.ones(
+        #     self.num_envs, len(self.feet_link_indices), 3, device=self.device, dtype=gs.tc_float,
+        # )
         self.num_envs = num_envs
         self.num_obs = obs_cfg["num_obs"]
         self.num_privileged_obs = None
@@ -41,6 +80,7 @@ class SpotEnv:
                 camera_pos=(2.0, 0.0, 2.5),
                 camera_lookat=(0.0, 0.0, 0.5),
                 camera_fov=40,
+                
             ),
             vis_options=gs.options.VisOptions(n_rendered_envs=1),
             rigid_options=gs.options.RigidOptions(
@@ -150,18 +190,11 @@ class SpotEnv:
         """
         # key w : increse x velocity
         if key.lower() == 'w':
-            self.commands[env_idx, 0] = torch.clamp(
-                self.commands[env_idx, 0] + delta,
-                min=self.command_cfg["lin_vel_x_range"][0],
-                max=self.command_cfg["lin_vel_x_range"][1]
-            )
+            self.commands[env_idx, 0] = self.command_cfg["lin_vel_x_range"][1]  # 最大速度
+            
         # key s : decrease x velocity
         elif key.lower() == 's':
-            self.commands[env_idx, 0] = torch.clamp(
-                self.commands[env_idx, 0] - delta,
-                min=self.command_cfg["lin_vel_x_range"][0],
-                max=self.command_cfg["lin_vel_x_range"][1]
-            )
+            self.commands[env_idx, 0] = -self.command_cfg["lin_vel_x_range"][1]
         # key a : decrease y velocity
         elif key.lower() == 'a':
             self.commands[env_idx, 1] = torch.clamp(
@@ -176,10 +209,26 @@ class SpotEnv:
                 min=self.command_cfg["lin_vel_y_range"][0],
                 max=self.command_cfg["lin_vel_y_range"][1]
             )
+        
 
     def step(self, actions):
-        self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
+        temp_actions = actions.clone()
+
+        if self.training_iteration >= 0:
+            # add random disturban arm action
+            self.arm_actions = torch.empty((actions.shape[0], 8), device=actions.device).uniform_(-100, 100)
+            last_arm_actions = self.last_actions[:, -8:]
+            self.arm_actions = last_arm_actions + (self.arm_actions - last_arm_actions) / 200 
+        else:
+            # first 100 round，arm has no action to stablize training
+            self.arm_actions = torch.zeros((actions.shape[0], 8), device=actions.device)
+
+        # replace action with random/no arm action
+        temp_actions[:, -8:] = self.arm_actions
+
+        self.actions = torch.clip(temp_actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
         exec_actions = self.last_actions if self.simulate_action_latency else self.actions
+        
         target_dof_pos = exec_actions * self.env_cfg["action_scale"] + self.default_dof_pos
         self.robot.control_dofs_position(target_dof_pos, self.motor_dofs)
         self.scene.step()
@@ -300,7 +349,7 @@ class SpotEnv:
     # ------------ reward functions----------------
     def _reward_tracking_lin_vel(self):
         # Tracking of linear velocity commands (xy axes)
-        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1) 
         return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
 
     def _reward_tracking_ang_vel(self):
@@ -323,3 +372,33 @@ class SpotEnv:
     def _reward_base_height(self):
         # Penalize base height away from target
         return torch.square(self.base_pos[:, 2] - self.reward_cfg["base_height_target"])
+    def _reward_arm_position(self):
+        # Track the arm with gievn position #
+        arm_pos_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-arm_pos_error / self.reward_cfg["tracking_sigma"])
+    def _reward_stay_still(self):
+        return torch.sum(torch.square(self.base_lin_vel[:, :2]), dim=1)
+    # def _reward_feet_distance(self):
+    #     current_time = self.episode_length_buf * self.dt
+    #     cur_footsteps_translated = self.foot_positions - self.base_pos.unsqueeze(1)
+    #     footsteps_in_body_frame = torch.zeros(self.num_envs, 4, 3, device=self.device)
+    #     for i in range(4):
+    #         footsteps_in_body_frame[:, i, :] = gs_quat_apply(gs_quat_conjugate(self.base_quat),
+    #                                                              cur_footsteps_translated[:, i, :])
+
+    #     stance_width = 0.3 * torch.zeros([self.num_envs, 1,], device=self.device)
+    #     desired_ys = torch.cat([stance_width / 2, -stance_width / 2, stance_width / 2, -stance_width / 2], dim=1)
+    #     stance_diff = torch.square(desired_ys - footsteps_in_body_frame[:, :, 1]).sum(dim=1)
+        
+    #     return stance_diff
+    def _reward_feet_air_time(self):
+        # Reward long steps
+        contact = self.link_contact_forces[:, self.feet_link_indices, 2] > 1.
+        contact_filt = torch.logical_or(contact, self.last_contacts) 
+        self.last_contacts = contact
+        first_contact = (self.feet_air_time > 0.) * contact_filt
+        self.feet_air_time += self.dt
+        rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1) # reward only on first contact with the ground
+        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
+        self.feet_air_time *= ~contact_filt
+        return rew_airTime

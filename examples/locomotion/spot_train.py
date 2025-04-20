@@ -59,7 +59,9 @@ def get_train_cfg(exp_name, max_iterations):
 def get_cfgs():
     env_cfg = {
         "num_actions": 19,
+        'feet_link_names': ['foot'],
         # joint/link names
+        # 'penalized_contact_link_names': ['base', 'thigh', 'calf'],
         "default_joint_angles": {  # [rad]
             "fl_hx": 0.0,
             "fr_hx": 0.0,
@@ -125,7 +127,7 @@ def get_cfgs():
     obs_cfg = {
         "num_obs": 45 + 21,
         "obs_scales": {
-            "lin_vel": 2.0,
+            "lin_vel": 5.0,
             "ang_vel": 0.25,
             "dof_pos": 1.0,
             "dof_vel": 0.05,
@@ -134,21 +136,25 @@ def get_cfgs():
     reward_cfg = {
         "tracking_sigma": 0.25,
         "base_height_target": 0.55,
-        "feet_height_target": 0.15,
+        "feet_height_target": 0.3,
+        
         "reward_scales": {
-            "tracking_lin_vel": 1.0,
+            "tracking_lin_vel": 2.0,
             "tracking_ang_vel": 0.2,
             "lin_vel_z": -1.0,
             "base_height": -50.0,
             "action_rate": -0.005,
-            "similar_to_default": -0.01,
+            "similar_to_default": -0.05,
+            # "stay_still": 1.0
+            # "feet_distance": 1.0
         },
     }
     command_cfg = {
-        "num_commands": 3,
+        "num_commands": 3,  #5 in arm_trace
         "lin_vel_x_range": [-0.5, 0.5],
         "lin_vel_y_range": [-0.0, 0.0],
         "ang_vel_range": [0, 0],
+        "arm_pos_range":[-10]
     }
 
     return env_cfg, obs_cfg, reward_cfg, command_cfg
@@ -156,9 +162,9 @@ def get_cfgs():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-e", "--exp_name", type=str, default="spot-walking")
-    parser.add_argument("-B", "--num_envs", type=int, default=4096)
-    parser.add_argument("--max_iterations", type=int, default=1000)
+    parser.add_argument("-e", "--exp_name", type=str, default="spot-walking-disturbance")
+    parser.add_argument("-B", "--num_envs", type=int, default=10000)
+    parser.add_argument("--max_iterations", type=int, default=3000)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -172,7 +178,7 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     env = SpotEnv(
-        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True
+        num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=False
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device="cuda:0")
