@@ -214,15 +214,19 @@ class SpotEnv:
     def step(self, actions):
         temp_actions = actions.clone()
 
-        if self.training_iteration >= 0:
+        if self.training_iteration >= 1000:
             # add random disturban arm action
             self.arm_actions = torch.empty((actions.shape[0], 8), device=actions.device).uniform_(-100, 100)
             last_arm_actions = self.last_actions[:, -8:]
-            self.arm_actions = last_arm_actions + (self.arm_actions - last_arm_actions) / 200 
+            self.arm_actions = last_arm_actions + (self.arm_actions - last_arm_actions) / 200 * (self.training_iteration - 1000)/2000
         else:
             # first 100 round，arm has no action to stablize training
             self.arm_actions = torch.zeros((actions.shape[0], 8), device=actions.device)
-
+            
+        if self.is_eval:
+            self.arm_actions = torch.empty((actions.shape[0], 8), device=actions.device).uniform_(-100, 100)
+            last_arm_actions = self.last_actions[:, -8:]
+            self.arm_actions = last_arm_actions + (self.arm_actions - last_arm_actions) / 200 * 1.5
         # replace action with random/no arm action
         temp_actions[:, -8:] = self.arm_actions
 
