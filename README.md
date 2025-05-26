@@ -1,5 +1,5 @@
 # SpotDigitalTwin
-![demo GIF](./25P08.gif)
+![demo GIF](./25p08.gif)
 ## Installation:
 ### Setup the simulation
 ```
