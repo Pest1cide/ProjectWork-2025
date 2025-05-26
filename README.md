@@ -1,7 +1,10 @@
 # SpotDigitalTwin
 
 ## Installation:
-
+### Setup the simulation
+```
+pip install genesis-world  # Requires Python>=3.10,<3.13;
+```
 ### Downloading the SDK
 ```
 git clone https://github.com/boston-dynamics/spot-sdk.git
