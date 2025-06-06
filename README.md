@@ -1,14 +1,7 @@
 # SpotDigitalTwin
 ![demo GIF](./25p08.gif)
 ## Installation:
-### Setup the simulation
-```
-pip install genesis-world  # Requires Python>=3.10,<3.13;
-```
-### Downloading the SDK
-```
-git clone https://github.com/boston-dynamics/spot-sdk.git
-```
+
 
 ### Installing venv
 ```
@@ -22,31 +15,12 @@ python3 -m venv venv
 ```
 source /venv/bin/activate
 ```
-
-### Installing python packages
+### Setup the simulation
 ```
-python3 -m pip install --upgrade bosdyn-client bosdyn-mission bosdyn-choreography-client bosdyn-orbit
-```
-
-### Installing requirements
-```
-python3 -m pip install -r requirements.txt
+pip install genesis-world  # Requires Python>=3.10,<3.13;
 ```
 
-## Check battery
+### Examples
 ```
-https://10.0.0.30/battery
+python3 examples/locomotion/spot_eval.py
 ```
-
-## vncserver
-```
-password: spot1234
-```
-
-## export BOSDYN_CLIENT
-```
-BOSDYN_CLIENT_USERNAME = rllab
-BOSDYN_CLIENT_PASSWORD = robotlearninglab
-```
-
-
